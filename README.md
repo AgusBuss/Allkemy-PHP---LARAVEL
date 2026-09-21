@@ -158,3 +158,66 @@ controlador: Laravel redirige de vuelta al formulario con los errores.
 Todavía no hay API REST (eso es la Entrega 3) ni autenticación/JWT (Entrega
 4). El foco de esta entrega es el framework, Eloquent y las vistas Blade
 tradicionales.
+
+
+
+
+# Tienda de Negocios — Proyecto Integrador Laravel
+
+Proyecto integrador individual desarrollado en PHP 8.5 y Laravel 11 (vía Herd Lite).
+
+---
+
+## Entrega 3: Desarrollo con APIs (Carrito de Compras, Resumen y Checkout)
+
+En esta tercera entrega se expandió el proyecto integrador transformándolo en una API RESTful funcional, incorporando la gestión persistente del carrito de compras, el resumen de montos con reglas de negocio y el procesamiento del checkout con control transaccional de stock.
+
+### 1. Arquitectura y Recursos API
+
+Todas las rutas de la API se encuentran versionadas bajo el prefijo `/api/v1/` (`routes/api.php`):
+
+* **Productos y Categorías (`/api/v1/productos`, `/api/v1/categorias`)**:
+  * Controllers API (`ProductoController`, `CategoriaController`) y DTOs de salida (`ProductoResource`, `CategoriaResource`).
+  * CRUD completo con respuestas JSON estandarizadas.
+* **Carrito de Compras (`/api/v1/carrito`)**:
+  * Persistencia en base de datos (`carrito_items`) asociada a `usuario_id`.
+  * `GET /api/v1/carrito?usuario_id=X`: Muestra los ítems del usuario y el subtotal acumulado.
+  * `POST /api/v1/carrito`: Agrega un producto. Si ya existe en el carrito, acumula la cantidad validando stock disponible con la regla `StockDisponible`.
+  * `PUT /api/v1/carrito/{id}`: Actualiza la cantidad de un ítem puntual.
+  * `DELETE /api/v1/carrito/{id}`: Elimina un ítem específico del carrito.
+  * `DELETE /api/v1/carrito/vaciar?usuario_id=X`: Vacía completamente el carrito del usuario.
+* **Resumen de Compra (`GET /api/v1/carrito/resumen?usuario_id=X`)**:
+  * Utiliza el DTO de solo lectura `ResumenCompraData`.
+  * Calcula subtotal, IVA (21%), envío ($2000 fijo, o gratis para subtotales mayores a $50.000) y total final.
+* **Checkout (`POST /api/v1/checkout`)**:
+  * Valida los datos de envío y método de pago mediante `CheckoutRequest`.
+  * Verifica el stock actualizado de cada producto antes de procesar la orden.
+  * Ejecuta una **transacción atómica (`DB::transaction`)** que:
+    1. Registra el pedido en la tabla `pedidos` y sus ítems en `pedido_items`.
+    2. Descuenta el stock de los productos comprados (`Producto::decrement`).
+    3. Vacía el carrito del usuario.
+  * Retorna la orden confirmada estructurada a través de `PedidoResource`.
+
+---
+
+### 2. Principios REST Implementados
+
+1. **Uso de Recursos y Nombres en Plural**: Los endpoints representan entidades de dominio sustantivas en plural (`/productos`, `/categorias`, `/carrito`).
+2. **Métodos y Verbos HTTP Estándar**:
+   * `GET`: Consultas de lectura sin efectos secundarios.
+   * `POST`: Creación de recursos (agregar al carrito, confirmar checkout).
+   * `PUT`: Actualización completa o de atributos específicos.
+   * `DELETE`: Remoción de recursos.
+3. **Códigos de Estado HTTP Apropiados**:
+   * `200 OK`: Consultas y actualizaciones exitosas.
+   * `201 Created`: Recursos creados correctamente (producto agregado, checkout confirmado).
+   * `404 Not Found`: Recurso no encontrado en la base de datos (vía Implicit Model Binding).
+   * `422 Unprocessable Entity`: Errores de validación de formulario o reglas de negocio (ej. carrito vacío o stock insuficiente).
+4. **Representación de Datos Uniforme (JSON)**: Salidas formateadas mediante API Resources y DTOs para mantener el desacoplamiento entre los modelos de la base de datos y la interfaz pública.
+5. **Manejo Estandarizado de Errores**: Laravel procesa las excepciones de validación devolviendo un formato JSON consistente con mensajes de error descriptivos.
+
+---
+
+### 3. Colección de Postman
+
+Se incluye en la raíz del repositorio el archivo `Postman_Entrega_3.json` con todas las peticiones configuradas y probadas para verificar el funcionamiento de los endpoints.
