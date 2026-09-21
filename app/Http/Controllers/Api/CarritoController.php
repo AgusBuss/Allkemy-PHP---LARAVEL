@@ -7,137 +7,99 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CarritoRequest;
 use App\Http\Resources\CarritoItemResource;
 use App\Models\CarritoItem;
-use App\Models\Producto;
-use App\Rules\StockDisponible;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CarritoController extends Controller
 {
     /**
-     * GET /api/v1/carrito?usuario_id=X
-     * Muestra el carrito completo de un usuario: sus items y el total.
+     * GET /api/v1/carrito
+     * Retorna los ítems del carrito del usuario autenticado.
      */
     public function index(Request $request): JsonResponse
     {
-        $request->validate([
-            'usuario_id' => ['required', 'integer', 'exists:usuarios,id'],
-        ]);
+        $usuario = $request->user();
 
-        $items = CarritoItem::with('producto.categoria')
-            ->where('usuario_id', $request->integer('usuario_id'))
+        $items = CarritoItem::with('producto')
+            ->where('usuario_id', $usuario->id)
             ->get();
+
+        $subtotal = $items->sum(fn ($item) => $item->cantidad * $item->producto->precio);
 
         return response()->json([
             'data' => CarritoItemResource::collection($items),
-            'total' => (float) $items->sum(fn (CarritoItem $item) => $item->subtotal),
-        ]);
-    }
-
-    /**
-     * GET /api/v1/carrito/resumen?usuario_id=X
-     * Devuelve el resumen de compra del carrito de un usuario:
-     * subtotal, impuestos, envio y total.
-     */
-    public function resumen(Request $request): JsonResponse
-    {
-        $request->validate([
-            'usuario_id' => ['required', 'integer', 'exists:usuarios,id'],
-        ]);
-
-        $items = CarritoItem::with('producto')
-            ->where('usuario_id', $request->integer('usuario_id'))
-            ->get();
-
-        if ($items->isEmpty()) {
-            return response()->json([
-                'message' => 'El carrito esta vacio.',
-            ], 422);
-        }
-
-        $subtotal = (float) $items->sum(fn (CarritoItem $item) => $item->subtotal);
-        $resumen = ResumenCompraData::desdeSubtotal($subtotal);
-
-        return response()->json([
-            'data' => $resumen->toArray(),
+            'meta' => [
+                'subtotal' => (float) $subtotal,
+                'cantidad_items' => $items->sum('cantidad'),
+            ],
         ]);
     }
 
     /**
      * POST /api/v1/carrito
-     * Agrega un producto al carrito. Si el usuario ya tiene ese
-     * producto en su carrito, suma la cantidad en vez de duplicar la fila.
+     * Agrega un producto o incrementa la cantidad en el carrito del usuario.
      */
     public function store(CarritoRequest $request): JsonResponse
     {
-        $usuarioId = $request->integer('usuario_id');
+        $usuarioId = $request->user()->id;
         $productoId = $request->integer('producto_id');
-        $cantidadNueva = $request->integer('cantidad');
+        $cantidad = $request->integer('cantidad');
 
         $item = CarritoItem::where('usuario_id', $usuarioId)
             ->where('producto_id', $productoId)
             ->first();
 
         if ($item) {
-            $cantidadTotal = $item->cantidad + $cantidadNueva;
-            $producto = Producto::find($productoId);
-
-            if ($cantidadTotal > $producto->stock) {
-                return response()->json([
-                    'message' => "No hay stock suficiente. Stock disponible: {$producto->stock}. Ya tenes {$item->cantidad} en el carrito.",
-                ], 422);
-            }
-
-            $item->update(['cantidad' => $cantidadTotal]);
+            $item->increment('cantidad', $cantidad);
+            $item->refresh();
         } else {
             $item = CarritoItem::create([
                 'usuario_id' => $usuarioId,
                 'producto_id' => $productoId,
-                'cantidad' => $cantidadNueva,
+                'cantidad' => $cantidad,
             ]);
         }
 
-        $item->load('producto.categoria');
+        $item->load('producto');
 
         return response()->json([
-            'message' => 'Producto agregado al carrito.',
+            'message' => 'Producto agregado al carrito con exito.',
             'data' => new CarritoItemResource($item),
         ], 201);
     }
 
     /**
      * PUT /api/v1/carrito/{carritoItem}
-     * Actualiza la cantidad de un item puntual del carrito.
+     * Actualiza la cantidad de un ítem existente en el carrito.
      */
-    public function update(Request $request, CarritoItem $carritoItem): JsonResponse
+    public function update(CarritoRequest $request, CarritoItem $carritoItem): JsonResponse
     {
-        $request->validate([
-            'cantidad' => [
-                'required',
-                'integer',
-                'min:1',
-                new StockDisponible($carritoItem->producto_id),
-            ],
-        ], [
-            'cantidad.required' => 'La cantidad es obligatoria.',
-            'cantidad.min' => 'La cantidad tiene que ser al menos 1.',
+        if ($carritoItem->usuario_id !== $request->user()->id) {
+            return response()->json(['message' => 'No autorizado para modificar este item.'], 403);
+        }
+
+        $carritoItem->update([
+            'cantidad' => $request->integer('cantidad'),
         ]);
 
-        $carritoItem->update(['cantidad' => $request->integer('cantidad')]);
-        $carritoItem->load('producto.categoria');
+        $carritoItem->load('producto');
 
         return response()->json([
-            'message' => 'Cantidad actualizada.',
+            'message' => 'Cantidad actualizada con exito.',
             'data' => new CarritoItemResource($carritoItem),
         ]);
     }
 
     /**
      * DELETE /api/v1/carrito/{carritoItem}
-     * Elimina un item puntual del carrito.
+     * Elimina un ítem puntual del carrito.
      */
-    public function destroy(CarritoItem $carritoItem): JsonResponse
+    public function destroy(Request $request, CarritoItem $carritoItem): JsonResponse
     {
+        if ($carritoItem->usuario_id !== $request->user()->id) {
+            return response()->json(['message' => 'No autorizado para eliminar este item.'], 403);
+        }
+
         $carritoItem->delete();
 
         return response()->json([
@@ -146,19 +108,36 @@ class CarritoController extends Controller
     }
 
     /**
-     * DELETE /api/v1/carrito/vaciar?usuario_id=X
-     * Vacia todo el carrito de un usuario.
+     * DELETE /api/v1/carrito/vaciar
+     * Vacía completamente el carrito del usuario autenticado.
      */
     public function vaciar(Request $request): JsonResponse
     {
-        $request->validate([
-            'usuario_id' => ['required', 'integer', 'exists:usuarios,id'],
-        ]);
-
-        CarritoItem::where('usuario_id', $request->integer('usuario_id'))->delete();
+        CarritoItem::where('usuario_id', $request->user()->id)->delete();
 
         return response()->json([
-            'message' => 'Carrito vaciado correctamente.',
+            'message' => 'Carrito vaciado exitosamente.',
+        ]);
+    }
+
+    /**
+     * GET /api/v1/carrito/resumen
+     * Muestra los montos calculados usando el DTO ResumenCompraData.
+     */
+    public function resumen(Request $request): JsonResponse
+    {
+        $items = CarritoItem::with('producto')
+            ->where('usuario_id', $request->user()->id)
+            ->get();
+
+        if ($items->isEmpty()) {
+            return response()->json(['message' => 'El carrito esta vacio.'], 422);
+        }
+
+        $resumen = ResumenCompraData::fromCarritoItems($items);
+
+        return response()->json([
+            'data' => $resumen->toArray(),
         ]);
     }
 }

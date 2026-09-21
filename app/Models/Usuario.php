@@ -2,24 +2,42 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
-class Usuario extends Model
+class Usuario extends Authenticatable
 {
-    /**
-     * Atributos que se pueden asignar de forma masiva (create/update).
-     */
+    use HasApiTokens, HasFactory, Notifiable;
+
+    protected $table = 'usuarios';
+
     protected $fillable = [
         'nombre',
         'email',
+        'password',
     ];
 
-    /**
-     * Un usuario puede tener muchos items en su carrito.
-     */
-    public function carritoItems(): HasMany
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected function casts(): array
     {
-        return $this->hasMany(CarritoItem::class);
+        return [
+            'password' => 'hashed',
+        ];
+    }
+
+    public function carritoItems()
+    {
+        return $this->hasMany(CarritoItem::class, 'usuario_id');
+    }
+
+    public function pedidos()
+    {
+        return $this->hasMany(Pedido::class, 'usuario_id');
     }
 }

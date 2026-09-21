@@ -17,69 +17,65 @@ class CheckoutController extends Controller
 {
     /**
      * POST /api/v1/checkout
-     * Procesa la compra del carrito del usuario, descuenta stock y vacia el carrito.
+     * Procesa la compra utilizando DB::transaction para garantizar atomicidad y control de stock.
      */
     public function __invoke(CheckoutRequest $request): JsonResponse
     {
-        $usuarioId = $request->integer('usuario_id');
+        $usuario = $request->user();
 
-        $itemsCarrito = CarritoItem::with('producto')
-            ->where('usuario_id', $usuarioId)
+        $items = CarritoItem::with('producto')
+            ->where('usuario_id', $usuario->id)
             ->get();
 
-        if ($itemsCarrito->isEmpty()) {
+        if ($items->isEmpty()) {
             return response()->json([
                 'message' => 'No se puede procesar el checkout porque el carrito esta vacio.',
             ], 422);
         }
 
-        // Validacion previa de stock antes de abrir la transaccion
-        foreach ($itemsCarrito as $item) {
-            if ($item->cantidad > $item->producto->stock) {
+        foreach ($items as $item) {
+            if ($item->producto->stock < $item->cantidad) {
                 return response()->json([
-                    'message' => "El producto '{$item->producto->nombre}' no tiene stock suficiente para completar la compra. Stock disponible: {$item->producto->stock}.",
+                    'message' => "Stock insuficiente para el producto: {$item->producto->nombre}.",
                 ], 422);
             }
         }
 
-        $subtotal = (float) $itemsCarrito->sum(fn (CarritoItem $item) => $item->subtotal);
-        $resumen = ResumenCompraData::desdeSubtotal($subtotal);
+        $resumen = ResumenCompraData::fromCarritoItems($items);
 
-        // Transaccion atomica para garantizar integridad de datos
-        $pedido = DB::transaction(function () use ($request, $usuarioId, $itemsCarrito, $resumen) {
+        $pedido = DB::transaction(function () use ($request, $usuario, $items, $resumen) {
             $nuevoPedido = Pedido::create([
-                'usuario_id' => $usuarioId,
+                'usuario_id' => $usuario->id,
                 'direccion' => $request->string('direccion'),
                 'ciudad' => $request->string('ciudad'),
                 'codigo_postal' => $request->string('codigo_postal'),
                 'metodo_pago' => $request->string('metodo_pago'),
-                'estado' => 'completado',
                 'subtotal' => $resumen->subtotal,
                 'impuestos' => $resumen->impuestos,
-                'envio' => $resumen->envio,
+                'costo_envio' => $resumen->costoEnvio,
                 'total' => $resumen->total,
+                'estado' => 'completado',
             ]);
 
-            foreach ($itemsCarrito as $item) {
-                // Registrar item del pedido
+            foreach ($items as $item) {
                 PedidoItem::create([
                     'pedido_id' => $nuevoPedido->id,
                     'producto_id' => $item->producto_id,
-                    'cantidad' => $item->cantidad,
+                    'nombre_producto' => $item->producto->nombre,
                     'precio_unitario' => $item->producto->precio,
+                    'cantidad' => $item->cantidad,
+                    'subtotal' => $item->cantidad * $item->producto->precio,
                 ]);
 
-                // Descontar stock del producto
                 Producto::where('id', $item->producto_id)->decrement('stock', $item->cantidad);
             }
 
-            // Vaciar el carrito del usuario
-            CarritoItem::where('usuario_id', $usuarioId)->delete();
+            CarritoItem::where('usuario_id', $usuario->id)->delete();
 
             return $nuevoPedido;
         });
 
-        $pedido->load('items.producto');
+        $pedido->load('items');
 
         return response()->json([
             'message' => 'Compra procesada y confirmada con exito.',

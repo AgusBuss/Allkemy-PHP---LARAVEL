@@ -221,3 +221,34 @@ Todas las rutas de la API se encuentran versionadas bajo el prefijo `/api/v1/` (
 ### 3. Colección de Postman
 
 Se incluye en la raíz del repositorio el archivo `Postman_Entrega_3.json` con todas las peticiones configuradas y probadas para verificar el funcionamiento de los endpoints.
+
+
+---
+
+## Entrega 4: Seguridad, Autenticación (Sanctum/JWT) y Protecciones
+
+En esta cuarta entrega se implementó la capa de seguridad y autenticación para la API REST utilizando **Laravel Sanctum** para la emisión y validación de Bearer Tokens, protegiendo las rutas sensibles de la tienda y previniendo ataques comunes.
+
+### 1. Sistema de Autenticación y Tokens
+
+* **Registro (`POST /api/v1/auth/register`)**: Crea nuevos usuarios almacenando las contraseñas hasheadas mediante `bcrypt` y devuelve un token Bearer de acceso.
+* **Inicio de Sesión (`POST /api/v1/auth/login`)**: Valida las credenciales y genera un nuevo token de acceso.
+* **Perfil (`GET /api/v1/auth/me`)**: Retorna los datos del usuario autenticado actual.
+* **Cierre de Sesión (`POST /api/v1/auth/logout`)**: Revoca el token con el que se realizó la solicitud.
+
+---
+
+### 2. Middlewares y Protecciones Aplicadas
+
+* **Protección de Rutas (`auth:sanctum`)**: Las rutas relacionadas con la gestión del carrito (`/api/v1/carrito/*`) y la confirmación de compras (`/api/v1/checkout`) requieren obligatoriamente un token Bearer válido. Las solicitudes anónimas son rechazadas automáticamente con una respuesta `401 Unauthorized`.
+* **Identidad Aislada**: El ID de usuario se extrae dinámicamente del contexto de autenticación (`$request->user()->id`), evitando que usuarios maliciosos manipulen carritos o compras de terceros mediante parámetros inyectados en la petición.
+* **Mitigación de Vulnerabilidades**:
+  * **SQL Injection**: Prevenido al utilizar Eloquent ORM y consultas preparadas con vinculación de parámetros.
+  * **XSS (Cross-Site Scripting)**: Control de tipos riguroso mediante `FormRequests` y escape automático en salidas estructuradas JSON.
+  * **Hashing Seguro**: Contraseñas procesadas mediante el algoritmo `bcrypt` (`password_hash`).
+
+---
+
+### 3. Colección de Postman
+
+Se incluye en la raíz del repositorio el archivo `Postman_Entrega_4.json` con la colección de peticiones que incluye el flujo completo de autenticación, la prueba de acceso denegado (`401 Unauthorized`) sin token y el acceso autorizado a las rutas protegidas.
