@@ -5,11 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
+use PHPOpenSourceSaver\JWTAuth\Contracts\JWTSubject;
 
-class Usuario extends Authenticatable
+class Usuario extends Authenticatable implements JWTSubject
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
     protected $table = 'usuarios';
 
@@ -31,13 +31,24 @@ class Usuario extends Authenticatable
         ];
     }
 
-    public function carritoItems()
+    /**
+     * Obtener el identificador que se almacenará en el claim "sub" del JWT.
+     */
+    public function getJWTIdentifier()
     {
-        return $this->hasMany(CarritoItem::class, 'usuario_id');
+        return $this->getKey();
     }
 
-    public function pedidos()
+    /**
+     * Retornar un arreglo clave-valor con claims personalizados para agregar al payload del JWT.
+     */
+    public function getJWTCustomClaims(): array
     {
-        return $this->hasMany(Pedido::class, 'usuario_id');
+        return [
+            'nombre' => $this->nombre,
+            'email' => $this->email,
+            'role' => 'cliente',
+            'issued_at' => now()->toIso8601String(),
+        ];
     }
 }

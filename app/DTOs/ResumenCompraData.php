@@ -2,53 +2,43 @@
 
 namespace App\DTOs;
 
-/**
- * DTO de solo lectura que representa el resumen de compra
- * (subtotal, impuestos, envio y total) devuelto por la API.
- */
+use Illuminate\Support\Collection;
+
 class ResumenCompraData
 {
-    public const PORCENTAJE_IMPUESTO = 0.21;
+    public float $subtotal;
+    public float $impuestos;
+    public float $costoEnvio;
+    public float $total;
 
-    public const COSTO_ENVIO = 2000.0;
-
-    public const MONTO_ENVIO_GRATIS = 50000.0;
-
-    public function __construct(
-        public readonly float $subtotal,
-        public readonly float $impuestos,
-        public readonly float $envio,
-        public readonly float $total,
-    ) {}
-
-    /**
-     * Construye el resumen a partir de un subtotal ya calculado,
-     * aplicando las reglas de impuestos y envio de la tienda.
-     */
-    public static function desdeSubtotal(float $subtotal): self
+    public function __construct(float $subtotal, float $impuestos, float $costoEnvio, float $total)
     {
-        $impuestos = round($subtotal * self::PORCENTAJE_IMPUESTO, 2);
-        $envio = $subtotal >= self::MONTO_ENVIO_GRATIS ? 0.0 : self::COSTO_ENVIO;
-        $total = round($subtotal + $impuestos + $envio, 2);
-
-        return new self(
-            subtotal: $subtotal,
-            impuestos: $impuestos,
-            envio: $envio,
-            total: $total,
-        );
+        $this->subtotal = $subtotal;
+        $this->impuestos = $impuestos;
+        $this->costoEnvio = $costoEnvio;
+        $this->total = $total;
     }
 
     /**
-     * Representacion como array para la respuesta JSON.
+     * Genera el DTO calculando los montos desde la colección de ítems del carrito.
      */
+    public static function fromCarrito(Collection $items): self
+    {
+        $subtotal = $items->sum(fn ($item) => $item->cantidad * $item->producto->precio);
+        $impuestos = $subtotal * 0.21; // 21% de IVA
+        $costoEnvio = $subtotal > 0 ? 500.00 : 0.00; // Costo fijo de envío
+        $total = $subtotal + $impuestos + $costoEnvio;
+
+        return new self($subtotal, $impuestos, $costoEnvio, $total);
+    }
+
     public function toArray(): array
     {
         return [
-            'subtotal' => $this->subtotal,
-            'impuestos' => $this->impuestos,
-            'envio' => $this->envio,
-            'total' => $this->total,
+            'subtotal'    => (float) $this->subtotal,
+            'impuestos'   => (float) $this->impuestos,
+            'costo_envio' => (float) $this->costoEnvio,
+            'total'       => (float) $this->total,
         ];
     }
 }

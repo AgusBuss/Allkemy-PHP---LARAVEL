@@ -8,78 +8,81 @@ use App\Http\Requests\Api\RegisterRequest;
 use App\Http\Resources\UsuarioResource;
 use App\Models\Usuario;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
     /**
-     * POST /api/v1/auth/register
-     * Registra un nuevo usuario en la tienda y emite un token Bearer.
+     * Registro de usuario e inicio de sesión con JWT.
      */
     public function register(RegisterRequest $request): JsonResponse
     {
         $usuario = Usuario::create([
-            'nombre' => $request->string('nombre'),
-            'email' => $request->string('email'),
-            'password' => Hash::make($request->string('password')),
+            'nombre'   => $request->validated('nombre'),
+            'email'    => $request->validated('email'),
+            'password' => Hash::make($request->validated('password')),
         ]);
 
-        $token = $usuario->createToken('auth_token')->plainTextToken;
+        $token = JWTAuth::fromUser($usuario);
 
         return response()->json([
-            'message' => 'Usuario registrado exitosamente.',
-            'data' => new UsuarioResource($usuario),
+            'message'      => 'Usuario registrado exitosamente.',
+            'data'         => new UsuarioResource($usuario),
             'access_token' => $token,
-            'token_type' => 'Bearer',
+            'token_type'   => 'bearer',
+            'expires_in'   => auth('api')->factory()->getTTL() * 60, // Expiración en segundos
         ], 201);
     }
 
     /**
-     * POST /api/v1/auth/login
-     * Valida credenciales y emite un token Bearer de acceso.
+     * Autenticación de usuario y generación de JWT.
      */
     public function login(LoginRequest $request): JsonResponse
     {
-        $usuario = Usuario::where('email', $request->string('email'))->first();
+        $credentials = $request->only('email', 'password');
 
-        if (! $usuario || ! Hash::check($request->string('password'), $usuario->password)) {
+        if (! $token = auth('api')->attempt($credentials)) {
             return response()->json([
-                'message' => 'Credenciales incorrectas.',
+                'message' => 'Credenciales inválidas.'
             ], 401);
         }
 
-        $token = $usuario->createToken('auth_token')->plainTextToken;
+        return $this->respondWithToken($token);
+    }
+
+    /**
+     * Obtener el perfil del usuario autenticado vía JWT.
+     */
+    public function me(): JsonResponse
+    {
+        return response()->json([
+            'data' => new UsuarioResource(auth('api')->user())
+        ], 200);
+    }
+
+    /**
+     * Cerrar sesión (Invalidar el token JWT actual).
+     */
+    public function logout(): JsonResponse
+    {
+        auth('api')->logout();
 
         return response()->json([
-            'message' => 'Inicio de sesion exitoso.',
-            'data' => new UsuarioResource($usuario),
+            'message' => 'Sesión cerrada exitosamente.'
+        ], 200);
+    }
+
+    /**
+     * Estructurar la respuesta del token JWT con expiración y metadatos.
+     */
+    protected function respondWithToken(string $token): JsonResponse
+    {
+        return response()->json([
             'access_token' => $token,
-            'token_type' => 'Bearer',
-        ]);
-    }
-
-    /**
-     * GET /api/v1/auth/me
-     * Retorna la informacion del usuario autenticado actual.
-     */
-    public function me(Request $request): JsonResponse
-    {
-        return response()->json([
-            'data' => new UsuarioResource($request->user()),
-        ]);
-    }
-
-    /**
-     * POST /api/v1/auth/logout
-     * Revoca (elimina) el token de acceso con el que se hizo la peticion.
-     */
-    public function logout(Request $request): JsonResponse
-    {
-        $request->user()->currentAccessToken()->delete();
-
-        return response()->json([
-            'message' => 'Sesion cerrada exitosamente.',
-        ]);
+            'token_type'   => 'bearer',
+            'expires_in'   => auth('api')->factory()->getTTL() * 60, // Expiración en segundos
+            'user'         => new UsuarioResource(auth('api')->user())
+        ], 200);
     }
 }

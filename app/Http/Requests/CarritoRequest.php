@@ -24,7 +24,6 @@ class CarritoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'usuario_id' => ['required', 'integer', 'exists:usuarios,id'],
             'producto_id' => ['required', 'integer', 'exists:productos,id'],
             'cantidad' => [
                 'required',
@@ -41,12 +40,10 @@ class CarritoRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'usuario_id.required' => 'Falta indicar el usuario.',
-            'usuario_id.exists' => 'El usuario indicado no existe.',
             'producto_id.required' => 'Falta indicar el producto.',
-            'producto_id.exists' => 'El producto indicado no existe.',
-            'cantidad.required' => 'La cantidad es obligatoria.',
-            'cantidad.min' => 'La cantidad tiene que ser al menos 1.',
+            'producto_id.exists'   => 'El producto indicado no existe.',
+            'cantidad.required'    => 'La cantidad es obligatoria.',
+            'cantidad.min'         => 'La cantidad tiene que ser al menos 1.',
         ];
     }
 }

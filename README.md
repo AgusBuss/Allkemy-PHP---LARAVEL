@@ -252,3 +252,63 @@ En esta cuarta entrega se implementó la capa de seguridad y autenticación para
 ### 3. Colección de Postman
 
 Se incluye en la raíz del repositorio el archivo `Postman_Entrega_4.json` con la colección de peticiones que incluye el flujo completo de autenticación, la prueba de acceso denegado (`401 Unauthorized`) sin token y el acceso autorizado a las rutas protegidas.
+
+
+
+## 🔒 Entrega 4: Autenticación Stateless con JWT (Corrección y Ajustes)
+
+En esta etapa se implementó y ajustó el sistema de autenticación stateless mediante tokens **JWT** (*JSON Web Tokens*) utilizando la librería `php-open-source-saver/jwt-auth`.
+
+### Correcciones y Ajustes Aplicados:
+* **Implementación de `JWTSubject` en el Modelo `User`**:
+  * Se configuró el modelo `User` (`app/Models/User.php`) asociándolo a la tabla `usuarios` e implementando los métodos obligatorios `getJWTIdentifier()` y `getJWTCustomClaims()`.
+* **Desacople de Identificación en Endpoints**:
+  * Se eliminó la dependencia de recibir `usuario_id` en el cuerpo de las peticiones (`FormRequests`). El usuario autenticado se deduce directamente de forma segura desde el token Bearer (`auth('api')->user()`).
+* **Protección de Rutas y Middlewares**:
+  * Se aplicó el middleware `auth:api` a las rutas del carrito (`/api/v1/carrito`) y checkout (`/api/v1/checkout`).
+  * Las peticiones sin cabecera `Authorization: Bearer <TOKEN>` o con tokens inválidos/expirados devuelven una respuesta estandarizada `401 Unauthenticated`.
+
+---
+
+## 🧪 Entrega 5: Testing, Aseguramiento de Calidad y Cierre de Proyecto
+
+Se implementó una suite completa de pruebas automatizadas unitarias y de integración utilizando **PHPUnit** y los comandos nativos de Laravel, garantizando la solidez de la lógica de negocio y la seguridad de la API antes de su despliegue.
+
+### 1. Configuración del Entorno de Pruebas
+* Configuración de `phpunit.xml` para ejecutar la suite sobre una base de datos **SQLite en memoria** (`:memory:`), asegurando pruebas ultra rápidas e independientes que no afectan la base de datos de desarrollo local.
+
+### 2. Generación de Datos de Prueba (Model Factories)
+Se construyeron factories específicas para generar registros consistentes respetando la integridad referencial de las migraciones:
+* `UserFactory`: Creación de usuarios de prueba asociados a la tabla `usuarios`.
+* `CategoriaFactory`: Generación de categorías de productos.
+* `ProductoFactory`: Generación de productos con precios y stock dinámicos.
+* `CarritoItemFactory`: Creación de ítems de carrito vinculando usuarios y productos.
+
+### 3. Pruebas Unitarias (Unit Tests)
+* **`ResumenCompraDataTest`**: Verifica que la clase DTO `ResumenCompraData` realice correctamente los cálculos de subtotales, discriminación del 21% de IVA, costo de envío y cálculo del total final de la orden.
+
+### 4. Pruebas de Integración (Feature Tests)
+* **`AuthApiTest`**: 
+  * Registro de nuevos usuarios (`POST /api/v1/auth/register`).
+  * Inicio de sesión y generación de token JWT (`POST /api/v1/auth/login`).
+  * Verificación de rechazo con código `401` ante accesos no autorizados a rutas protegidas.
+  * Verificación de acceso permitido con tokens válidos usando `$this->actingAs($user, 'api')`.
+* **`CarritoApiTest`**: 
+  * Adición de productos al carrito por parte de un usuario autenticado y verificación de su persistencia en la tabla `carrito_items`.
+* **`CheckoutApiTest`**:
+  * Ejecución atómica de la compra dentro de una transacción de base de datos (`DB::transaction`).
+  * Verificación del descuento automático del stock del producto en la tabla `productos`.
+  * Confirmación de la eliminación total de los ítems del carrito tras procesar la orden.
+
+### 5. Ejecución de la Suite de Tests
+Para ejecutar la suite de pruebas completa, correr el siguiente comando en la terminal:
+
+```bash
+php artisan test
+
+
+### 📸 Reporte y Evidencia de Ejecución de PHPUnit
+
+Se adjunta la evidencia de ejecución exitosa de la suite completa de pruebas unitarias y de integración (`php artisan test`), confirmando los 7 tests aprobados (17 aserciones) en el entorno de pruebas sobre SQLite en memoria:
+
+![Resultado de Pruebas PHPUnit](public/img/tests-output.png)

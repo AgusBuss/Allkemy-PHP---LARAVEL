@@ -18,7 +18,7 @@ class CarritoController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $usuario = $request->user();
+        $usuario = auth('api')->user();
 
         $items = CarritoItem::with('producto')
             ->where('usuario_id', $usuario->id)
@@ -41,11 +41,11 @@ class CarritoController extends Controller
      */
     public function store(CarritoRequest $request): JsonResponse
     {
-        $usuarioId = $request->user()->id;
+        $usuario = auth('api')->user();
         $productoId = $request->integer('producto_id');
         $cantidad = $request->integer('cantidad');
 
-        $item = CarritoItem::where('usuario_id', $usuarioId)
+        $item = CarritoItem::where('usuario_id', $usuario->id)
             ->where('producto_id', $productoId)
             ->first();
 
@@ -54,9 +54,9 @@ class CarritoController extends Controller
             $item->refresh();
         } else {
             $item = CarritoItem::create([
-                'usuario_id' => $usuarioId,
+                'usuario_id'  => $usuario->id,
                 'producto_id' => $productoId,
-                'cantidad' => $cantidad,
+                'cantidad'    => $cantidad,
             ]);
         }
 
@@ -64,7 +64,7 @@ class CarritoController extends Controller
 
         return response()->json([
             'message' => 'Producto agregado al carrito con exito.',
-            'data' => new CarritoItemResource($item),
+            'data'    => new CarritoItemResource($item),
         ], 201);
     }
 
@@ -74,7 +74,9 @@ class CarritoController extends Controller
      */
     public function update(CarritoRequest $request, CarritoItem $carritoItem): JsonResponse
     {
-        if ($carritoItem->usuario_id !== $request->user()->id) {
+        $usuario = auth('api')->user();
+
+        if ($carritoItem->usuario_id !== $usuario->id) {
             return response()->json(['message' => 'No autorizado para modificar este item.'], 403);
         }
 
@@ -86,7 +88,7 @@ class CarritoController extends Controller
 
         return response()->json([
             'message' => 'Cantidad actualizada con exito.',
-            'data' => new CarritoItemResource($carritoItem),
+            'data'    => new CarritoItemResource($carritoItem),
         ]);
     }
 
@@ -96,7 +98,9 @@ class CarritoController extends Controller
      */
     public function destroy(Request $request, CarritoItem $carritoItem): JsonResponse
     {
-        if ($carritoItem->usuario_id !== $request->user()->id) {
+        $usuario = auth('api')->user();
+
+        if ($carritoItem->usuario_id !== $usuario->id) {
             return response()->json(['message' => 'No autorizado para eliminar este item.'], 403);
         }
 
@@ -113,7 +117,9 @@ class CarritoController extends Controller
      */
     public function vaciar(Request $request): JsonResponse
     {
-        CarritoItem::where('usuario_id', $request->user()->id)->delete();
+        $usuario = auth('api')->user();
+
+        CarritoItem::where('usuario_id', $usuario->id)->delete();
 
         return response()->json([
             'message' => 'Carrito vaciado exitosamente.',
@@ -126,8 +132,10 @@ class CarritoController extends Controller
      */
     public function resumen(Request $request): JsonResponse
     {
+        $usuario = auth('api')->user();
+
         $items = CarritoItem::with('producto')
-            ->where('usuario_id', $request->user()->id)
+            ->where('usuario_id', $usuario->id)
             ->get();
 
         if ($items->isEmpty()) {

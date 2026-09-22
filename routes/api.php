@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.')->group(function () {
 
-    // Rutas Publicas de Autenticacion
+    // Rutas Públicas de Autenticación
     Route::prefix('auth')->group(function () {
         Route::post('register', [AuthController::class, 'register'])->name('auth.register');
         Route::post('login', [AuthController::class, 'login'])->name('auth.login');
@@ -19,8 +19,8 @@ Route::prefix('v1')->name('api.')->group(function () {
     Route::apiResource('productos', ProductoController::class)->only(['index', 'show']);
     Route::apiResource('categorias', CategoriaController::class)->only(['index', 'show']);
 
-    // Rutas Protegidas (Requieren Token Bearer Sanctum)
-    Route::middleware('auth:sanctum')->group(function () {
+    // Rutas Protegidas (Requieren Token Bearer JWT)
+    Route::middleware('auth:api')->group(function () {
 
         // Perfil y Logout
         Route::prefix('auth')->group(function () {
@@ -28,7 +28,7 @@ Route::prefix('v1')->name('api.')->group(function () {
             Route::post('logout', [AuthController::class, 'logout'])->name('auth.logout');
         });
 
-        // Administracion de Productos y Categorias
+        // Administración de Productos y Categorías
         Route::apiResource('productos', ProductoController::class)->except(['index', 'show']);
         Route::apiResource('categorias', CategoriaController::class)->except(['index', 'show']);
 
@@ -42,7 +42,7 @@ Route::prefix('v1')->name('api.')->group(function () {
             Route::delete('/{carritoItem}', [CarritoController::class, 'destroy'])->name('destroy');
         });
 
-        // Process Checkout
+        // Procesar Checkout
         Route::post('checkout', CheckoutController::class)->name('checkout');
     });
 });

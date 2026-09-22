@@ -21,7 +21,13 @@ class CheckoutController extends Controller
      */
     public function __invoke(CheckoutRequest $request): JsonResponse
     {
-        $usuario = $request->user();
+        $usuario = auth('api')->user();
+
+        if (!$usuario) {
+            return response()->json([
+                'message' => 'Unauthenticated.'
+            ], 401);
+        }
 
         $items = CarritoItem::with('producto')
             ->where('usuario_id', $usuario->id)
@@ -41,30 +47,30 @@ class CheckoutController extends Controller
             }
         }
 
-        $resumen = ResumenCompraData::fromCarritoItems($items);
+        $resumen = ResumenCompraData::fromCarrito($items);
 
         $pedido = DB::transaction(function () use ($request, $usuario, $items, $resumen) {
             $nuevoPedido = Pedido::create([
-                'usuario_id' => $usuario->id,
-                'direccion' => $request->string('direccion'),
-                'ciudad' => $request->string('ciudad'),
-                'codigo_postal' => $request->string('codigo_postal'),
-                'metodo_pago' => $request->string('metodo_pago'),
-                'subtotal' => $resumen->subtotal,
-                'impuestos' => $resumen->impuestos,
-                'costo_envio' => $resumen->costoEnvio,
-                'total' => $resumen->total,
-                'estado' => 'completado',
+                'usuario_id'    => $usuario->id,
+                'direccion'     => $request->validated('direccion'),
+                'ciudad'        => $request->validated('ciudad'),
+                'codigo_postal' => $request->validated('codigo_postal'),
+                'metodo_pago'   => $request->validated('metodo_pago'),
+                'subtotal'      => $resumen->subtotal,
+                'impuestos'     => $resumen->impuestos,
+                'envio'         => $resumen->costoEnvio ?? $resumen->envio ?? 0, // Clave de BD 'envio' y propiedad del DTO '$costoEnvio'
+                'total'         => $resumen->total,
+                'estado'        => 'completado',
             ]);
 
             foreach ($items as $item) {
                 PedidoItem::create([
-                    'pedido_id' => $nuevoPedido->id,
-                    'producto_id' => $item->producto_id,
+                    'pedido_id'       => $nuevoPedido->id,
+                    'producto_id'     => $item->producto_id,
                     'nombre_producto' => $item->producto->nombre,
                     'precio_unitario' => $item->producto->precio,
-                    'cantidad' => $item->cantidad,
-                    'subtotal' => $item->cantidad * $item->producto->precio,
+                    'cantidad'        => $item->cantidad,
+                    'subtotal'        => $item->cantidad * $item->producto->precio,
                 ]);
 
                 Producto::where('id', $item->producto_id)->decrement('stock', $item->cantidad);
@@ -79,7 +85,7 @@ class CheckoutController extends Controller
 
         return response()->json([
             'message' => 'Compra procesada y confirmada con exito.',
-            'data' => new PedidoResource($pedido),
+            'data'    => new PedidoResource($pedido),
         ], 201);
     }
 }

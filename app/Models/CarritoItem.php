@@ -2,22 +2,26 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CarritoItem extends Model
 {
-    /**
-     * Atributos que se pueden asignar de forma masiva (create/update).
-     */
+    use HasFactory;
+
     protected $fillable = [
-        'producto_id',
         'usuario_id',
+        'producto_id',
         'cantidad',
     ];
 
+    protected $casts = [
+        'cantidad' => 'integer',
+    ];
+
     /**
-     * Cada item del carrito pertenece a un producto.
+     * Un ítem del carrito pertenece a un producto.
      */
     public function producto(): BelongsTo
     {
@@ -25,20 +29,10 @@ class CarritoItem extends Model
     }
 
     /**
-     * Cada item del carrito pertenece a un usuario.
+     * Un ítem del carrito pertenece a un usuario.
      */
     public function usuario(): BelongsTo
     {
-        return $this->belongsTo(Usuario::class);
-    }
-
-    /**
-     * Subtotal de este item: precio del producto x cantidad.
-     * Equivalente al cálculo que hacía Carrito::calcularSubtotal()
-     * en la Entrega 1, pero ahora a nivel de item individual.
-     */
-    public function getSubtotalAttribute(): float
-    {
-        return $this->producto->precio * $this->cantidad;
+        return $this->belongsTo(User::class, 'usuario_id');
     }
 }
